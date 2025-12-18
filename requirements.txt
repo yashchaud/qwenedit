@@ -1,0 +1,12 @@
+requests>=2.31.0
+pillow>=10.0.0
+flask>=3.0.0
+
+# For pipeline mode (image models)
+diffusers>=0.24.0
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.24.0
+
+# For server mode (optional)
+# vllm>=0.2.0
