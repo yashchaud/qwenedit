@@ -271,18 +271,30 @@ class QwenClient:
                 device_map=self.device
             )
 
-    def _load_image(self, image_path: str):
-        """Load image from file or URL."""
+    def _load_image(self, image_path):
+        """Load image from file, URL, or PIL Image."""
         try:
             from PIL import Image
         except ImportError:
             raise ImportError("Pillow required. Install: pip install Pillow")
 
-        if image_path.startswith(('http://', 'https://')):
-            response = requests.get(image_path, timeout=30)
-            response.raise_for_status()
-            return Image.open(BytesIO(response.content))
-        return Image.open(image_path)
+        # If already a PIL Image, return as-is
+        if isinstance(image_path, Image.Image):
+            return image_path
+
+        # If string path or URL
+        if isinstance(image_path, str):
+            if image_path.startswith(('http://', 'https://')):
+                response = requests.get(image_path, timeout=30)
+                response.raise_for_status()
+                return Image.open(BytesIO(response.content))
+            return Image.open(image_path)
+
+        # If bytes
+        if isinstance(image_path, bytes):
+            return Image.open(BytesIO(image_path))
+
+        raise ValueError(f"Unsupported image type: {type(image_path)}")
 
     def _encode_image_base64(self, image_path: str) -> str:
         """Encode image to base64."""
@@ -351,9 +363,11 @@ class QwenClient:
 
         if images:
             # Image generation
-            if isinstance(images, str):
+            # Ensure images is a list
+            if not isinstance(images, list):
                 images = [images]
 
+            # Load all images (handles PIL Images, paths, URLs, bytes)
             loaded = [self._load_image(img) for img in images]
             config = {
                 "prompt": prompt,

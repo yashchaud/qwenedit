@@ -164,10 +164,19 @@ def edit_image():
         if not masked_image:
             return jsonify({"error": "masked_image is required"}), 400
 
-        # Get optional parameters
-        num_inference_steps = int(request.form.get('num_inference_steps', 50))
-        guidance_scale = float(request.form.get('guidance_scale', 7.5))
-        return_type = request.form.get('return_type', 'json')
+        # Get optional parameters (check both form and json)
+        num_inference_steps = 50
+        guidance_scale = 7.5
+        return_type = 'json'
+
+        if request.form:
+            num_inference_steps = int(request.form.get('num_inference_steps', 50))
+            guidance_scale = float(request.form.get('guidance_scale', 7.5))
+            return_type = request.form.get('return_type', 'json')
+        elif request.json:
+            num_inference_steps = int(request.json.get('num_inference_steps', 50))
+            guidance_scale = float(request.json.get('guidance_scale', 7.5))
+            return_type = request.json.get('return_type', 'json')
 
         print(f"Processing edit: {prompt}")
         print(f"Ref image size: {ref_image.size}, Mask size: {masked_image.size}")
