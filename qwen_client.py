@@ -184,7 +184,9 @@ class QwenClient:
             return
 
         is_image_model = "image" in self.model_path.lower()
-        is_gguf = self.model_path.lower().endswith('.gguf') or 'gguf' in self.model_path.lower()
+        # Only detect GGUF if it's actually a GGUF file or GGUF-specific repo
+        is_gguf = (self.model_path.lower().endswith('.gguf') or
+                   'gguf' in self.model_path.lower() and 'quantstack' in self.model_path.lower())
         is_quantized = any(q in self.model_path.lower() for q in ['4bit', '8bit', 'nf4', 'int4', 'int8'])
 
         if is_image_model:

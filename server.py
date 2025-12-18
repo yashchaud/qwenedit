@@ -28,7 +28,8 @@ import qwen_client
 app = Flask(__name__)
 
 # Initialize Qwen client
-MODEL_PATH = os.getenv("QWEN_MODEL_PATH", "Qwen/Qwen-Image-Edit-2509")
+# Use official Qwen model (compatible with diffusers)
+MODEL_PATH = os.getenv("QWEN_MODEL_PATH", "Qwen/Qwen-Image-Edit")
 client = qwen_client.QwenClient(
     model_path=MODEL_PATH,
     mode="pipeline",
