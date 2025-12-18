@@ -3,10 +3,14 @@ pillow>=10.0.0
 flask>=3.0.0
 
 # For pipeline mode (image models)
-diffusers>=0.24.0
+diffusers>=0.27.0
 torch>=2.0.0
 transformers>=4.35.0
 accelerate>=0.24.0
+
+# For quantization (optional - uncomment what you need)
+# bitsandbytes>=0.41.0  # For 4-bit/8-bit quantization
+# scipy>=1.10.0  # Required by bitsandbytes
 
 # For server mode (optional)
 # vllm>=0.2.0
