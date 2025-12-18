@@ -5,6 +5,7 @@ flask>=3.0.0
 # For pipeline mode (image models)
 diffusers>=0.27.0
 torch>=2.0.0
+torchvision>=0.15.0
 transformers>=4.35.0
 accelerate>=0.24.0
 
