@@ -184,6 +184,8 @@ class QwenClient:
             return
 
         is_image_model = "image" in self.model_path.lower()
+        is_gguf = self.model_path.lower().endswith('.gguf') or 'gguf' in self.model_path.lower()
+        is_quantized = any(q in self.model_path.lower() for q in ['4bit', '8bit', 'nf4', 'int4', 'int8'])
 
         if is_image_model:
             try:
@@ -194,14 +196,56 @@ class QwenClient:
                     "diffusers required. Install: pip install diffusers torch transformers accelerate"
                 )
 
-            dtype = {"auto": torch.float16, "float16": torch.float16,
-                    "bfloat16": torch.bfloat16, "float32": torch.float32}[self.torch_dtype]
+            # Handle GGUF models
+            if is_gguf:
+                try:
+                    from diffusers import GGUFQuantizationConfig
+                except ImportError:
+                    raise ImportError(
+                        "GGUF support requires diffusers>=0.27.0. Install: pip install diffusers>=0.27.0"
+                    )
 
-            self.pipeline = DiffusionPipeline.from_pretrained(
-                self.model_path, torch_dtype=dtype, trust_remote_code=self.trust_remote_code
-            )
+                # Load GGUF quantized model
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    self.model_path,
+                    quantization_config=GGUFQuantizationConfig(),
+                    trust_remote_code=self.trust_remote_code
+                )
+            # Handle 4-bit/8-bit quantization
+            elif is_quantized:
+                try:
+                    from transformers import BitsAndBytesConfig
+                except ImportError:
+                    raise ImportError(
+                        "Quantization requires bitsandbytes. Install: pip install bitsandbytes"
+                    )
 
-            if self.device != "auto":
+                # Detect quantization level
+                if '4bit' in self.model_path.lower() or 'nf4' in self.model_path.lower():
+                    quant_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=torch.float16,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True
+                    )
+                else:  # 8bit
+                    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    self.model_path,
+                    quantization_config=quant_config,
+                    trust_remote_code=self.trust_remote_code
+                )
+            # Standard loading (FP16/BF16/FP32)
+            else:
+                dtype = {"auto": torch.float16, "float16": torch.float16,
+                        "bfloat16": torch.bfloat16, "float32": torch.float32}[self.torch_dtype]
+
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    self.model_path, torch_dtype=dtype, trust_remote_code=self.trust_remote_code
+                )
+
+            if self.device != "auto" and not is_quantized:
                 self.pipeline.to(self.device)
         else:
             try:
