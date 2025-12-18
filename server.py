@@ -30,6 +30,10 @@ app = Flask(__name__)
 # Initialize Qwen client
 # Use official Qwen model (compatible with diffusers)
 MODEL_PATH = os.getenv("QWEN_MODEL_PATH", "Qwen/Qwen-Image-Edit")
+
+# Enable model caching to speed up loading
+# The model will be cached in ~/.cache/huggingface/hub/
+print(f"Initializing Qwen client with model: {MODEL_PATH}")
 client = qwen_client.QwenClient(
     model_path=MODEL_PATH,
     mode="pipeline",
@@ -37,33 +41,53 @@ client = qwen_client.QwenClient(
     torch_dtype="float16"
 )
 
-# Load pipeline on startup
-print("Loading Qwen model...")
+# Load pipeline on startup (will use cache if available)
+print("Loading Qwen model (this may take a few minutes on first run)...")
 client.load_pipeline()
 print("Model ready!")
 
 
 def decode_image(image_data):
     """Decode image from base64 string or file bytes."""
+    from PIL import ImageFile
+    # Allow loading of truncated images
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
     try:
         if isinstance(image_data, str):
             # Base64 string
             if image_data.startswith('data:image'):
                 # Remove data URL prefix
                 image_data = image_data.split(',')[1]
+
+            # Decode base64
             img_bytes = base64.b64decode(image_data)
-            img = Image.open(BytesIO(img_bytes))
+            print(f"Decoded {len(img_bytes)} bytes from base64")
+
+            # Open image with BytesIO
+            img_buffer = BytesIO(img_bytes)
+            img = Image.open(img_buffer)
         else:
             # File bytes
+            print(f"Opening image from {len(image_data)} bytes")
             img = Image.open(BytesIO(image_data))
 
-        # Convert to RGB and create a new image to avoid truncation
+        # Get image info before conversion
+        print(f"Image mode: {img.mode}, size: {img.size}")
+
+        # Convert to RGB - this forces the image to load
         img = img.convert('RGB')
-        # Force full load by creating a copy
+
+        # Create a new image to ensure all data is loaded
         img_copy = Image.new('RGB', img.size)
         img_copy.paste(img)
+
+        print(f"Successfully decoded image: {img_copy.size}")
         return img_copy
     except Exception as e:
+        import traceback
+        print(f"Image decode error: {type(e).__name__}: {str(e)}")
+        print(traceback.format_exc())
         raise ValueError(f"Failed to decode image: {str(e)}")
 
 
