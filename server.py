@@ -45,16 +45,23 @@ print("Model ready!")
 
 def decode_image(image_data):
     """Decode image from base64 string or file bytes."""
-    if isinstance(image_data, str):
-        # Base64 string
-        if image_data.startswith('data:image'):
-            # Remove data URL prefix
-            image_data = image_data.split(',')[1]
-        img_bytes = base64.b64decode(image_data)
-        return Image.open(BytesIO(img_bytes))
-    else:
-        # File bytes
-        return Image.open(BytesIO(image_data))
+    try:
+        if isinstance(image_data, str):
+            # Base64 string
+            if image_data.startswith('data:image'):
+                # Remove data URL prefix
+                image_data = image_data.split(',')[1]
+            img_bytes = base64.b64decode(image_data)
+            img = Image.open(BytesIO(img_bytes))
+        else:
+            # File bytes
+            img = Image.open(BytesIO(image_data))
+
+        # Load image fully to avoid truncation errors
+        img.load()
+        return img
+    except Exception as e:
+        raise ValueError(f"Failed to decode image: {str(e)}")
 
 
 def encode_image(image):
