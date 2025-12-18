@@ -57,9 +57,12 @@ def decode_image(image_data):
             # File bytes
             img = Image.open(BytesIO(image_data))
 
-        # Load image fully to avoid truncation errors
-        img.load()
-        return img
+        # Convert to RGB and create a new image to avoid truncation
+        img = img.convert('RGB')
+        # Force full load by creating a copy
+        img_copy = Image.new('RGB', img.size)
+        img_copy.paste(img)
+        return img_copy
     except Exception as e:
         raise ValueError(f"Failed to decode image: {str(e)}")
 
