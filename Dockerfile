@@ -30,9 +30,8 @@ COPY utils/ ./utils/
 ENV PYTHONUNBUFFERED=1
 ENV CUDA_VISIBLE_DEVICES=0
 
-# Health check (optional but recommended)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import torch; assert torch.cuda.is_available()"
+# Note: Health check removed to prevent build issues
+# RunPod will handle health checks automatically
 
 # Start handler
 CMD ["python", "-u", "handler.py"]
