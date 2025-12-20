@@ -7,7 +7,7 @@ RunPod serverless inference server for [Qwen-Image-Layered](https://huggingface.
 - Full parameter exposure for Qwen-Image-Layered pipeline
 - Variable layer decomposition (configurable layer count)
 - Dual output formats: Individual RGBA layers + PowerPoint package
-- Pre-downloaded model weights for fast cold starts (~15-20s)
+- Model caching on RunPod network volume (first start ~2-3 min, subsequent <1s)
 - Comprehensive error handling with detailed tracebacks
 - GPU-optimized with bfloat16 precision
 - Automated Docker builds via GitHub Actions
@@ -28,9 +28,10 @@ docker pull ghcr.io/<your-username>/qwenedit:latest
 2. Create new endpoint
 3. Use custom container: `ghcr.io/<your-username>/qwenedit:latest`
 4. Configure GPU (recommended: RTX 4090 24GB or A100 40GB)
-5. Set container disk to 20GB+ (model is ~4GB)
-6. Set timeout to 120 seconds
-7. Deploy and copy your endpoint URL
+5. Set container disk to 50GB+ (model is ~40GB)
+6. Enable network volume for model caching (recommended for faster subsequent starts)
+7. Set timeout to 180 seconds (to accommodate first-time model download)
+8. Deploy and copy your endpoint URL
 
 ## API Usage
 
@@ -206,7 +207,8 @@ To enable:
 
 ### Cold Start Time
 
-- **First container**: ~15-20 seconds (model preloaded in Docker image)
+- **First ever start**: ~2-3 minutes (downloads ~40GB model to RunPod network volume)
+- **Subsequent cold starts**: ~30-45 seconds (loads cached model from network volume)
 - **Warm container**: <1 second (model cached in GPU memory)
 
 ### Inference Time

@@ -18,12 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir git+https://github.com/huggingface/diffusers.git && \
     pip install --no-cache-dir runpod
 
-# Pre-download model weights (critical for cold start performance)
-# This downloads ~4GB of model weights into the container image
-RUN python -c "from diffusers import QwenImageLayeredPipeline; \
-    import torch; \
-    pipeline = QwenImageLayeredPipeline.from_pretrained('Qwen/Qwen-Image-Layered', torch_dtype=torch.bfloat16); \
-    print('Model downloaded successfully!')"
+# Note: Model weights (~40GB) are NOT pre-downloaded in the image due to size constraints
+# They will be downloaded on first inference and cached in RunPod's network volume
+# This results in a slower first cold start (~2-3 minutes) but much smaller image size
 
 # Copy application code
 COPY handler.py .
