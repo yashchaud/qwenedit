@@ -1,0 +1,41 @@
+# RunPod Serverless Dockerfile for Qwen-Image-Layered
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first (layer caching optimization)
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir git+https://github.com/huggingface/diffusers.git && \
+    pip install --no-cache-dir runpod
+
+# Pre-download model weights (critical for cold start performance)
+# This downloads ~4GB of model weights into the container image
+RUN python -c "from diffusers import QwenImageLayeredPipeline; \
+    import torch; \
+    pipeline = QwenImageLayeredPipeline.from_pretrained('Qwen/Qwen-Image-Layered', torch_dtype=torch.bfloat16); \
+    print('Model downloaded successfully!')"
+
+# Copy application code
+COPY handler.py .
+COPY utils/ ./utils/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Health check (optional but recommended)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import torch; assert torch.cuda.is_available()"
+
+# Start handler
+CMD ["python", "-u", "handler.py"]
