@@ -11,6 +11,7 @@ RunPod inference server for [Qwen-Image-Layered](https://huggingface.co/Qwen/Qwe
 - 🚀 **[Deployment Guide](#deployment-options)** - Serverless vs Pods setup
 - 🔧 **[Self-Hosted Runner Setup](RUNNER_SETUP.md)** - Build on RunPod CPU instance
 - 📚 **[API Documentation](#api-usage)** - Parameter reference
+- 📦 **[Dependencies](DEPENDENCIES.md)** - Complete dependency list and versions
 
 ## Features
 
@@ -398,6 +399,7 @@ qwenedit/
 ├── README.md                           # Main documentation
 ├── EXAMPLES.md                         # Complete API examples
 ├── DEPLOYMENT_COMPARISON.md            # Serverless vs Pods comparison
+├── DEPENDENCIES.md                     # Dependency list and versions
 └── RUNNER_SETUP.md                     # Self-hosted runner setup guide
 ```
 

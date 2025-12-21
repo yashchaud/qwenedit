@@ -1,17 +1,23 @@
-# Core dependencies
-torch>=2.0.0
-transformers>=4.51.3
-pillow>=10.0.0
-accelerate>=0.24.0
+# Core AI/ML dependencies
+torch>=2.0.0,<3.0.0
+transformers>=4.51.3,<5.0.0
+accelerate>=0.24.0,<1.0.0
+safetensors>=0.4.0
 
-# Additional utilities
+# Image processing
+pillow>=10.0.0,<11.0.0
+
+# PowerPoint generation
 python-pptx>=0.6.21
+
+# HTTP requests
 requests>=2.31.0
 
 # FastAPI for Pod deployment
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+fastapi>=0.104.0,<1.0.0
+uvicorn[standard]>=0.24.0,<1.0.0
 python-multipart>=0.0.6
+pydantic>=2.0.0,<3.0.0
 
-# Note: diffusers is installed from git in Dockerfile
-# git+https://github.com/huggingface/diffusers.git
+# Note: diffusers is installed from git in Dockerfile for latest Qwen support
+# pip install git+https://github.com/huggingface/diffusers.git
