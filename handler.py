@@ -23,13 +23,47 @@ def load_model():
     global pipeline
     if pipeline is None:
         print("Loading Qwen-Image-Layered pipeline...")
+
+        # Clear GPU cache before loading
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+
+        # Load with memory optimizations
         pipeline = QwenImageLayeredPipeline.from_pretrained(
             "Qwen/Qwen-Image-Layered",
-            torch_dtype=torch.bfloat16
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            use_safetensors=True
         )
         pipeline = pipeline.to("cuda")
+
+        # Enable memory efficient attention if available
+        try:
+            pipeline.enable_attention_slicing(1)
+            print("Attention slicing enabled")
+        except:
+            pass
+
+        # Enable VAE slicing to reduce memory
+        try:
+            pipeline.enable_vae_slicing()
+            print("VAE slicing enabled")
+        except:
+            pass
+
         pipeline.set_progress_bar_config(disable=True)
-        print("Pipeline loaded successfully!")
+
+        # Clear cache after loading
+        torch.cuda.empty_cache()
+
+        # Print memory stats
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(0) / 1024**3
+            reserved = torch.cuda.memory_reserved(0) / 1024**3
+            print(f"Pipeline loaded successfully!")
+            print(f"GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+
     return pipeline
 
 
@@ -106,11 +140,17 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             "use_en_prompt": params["use_en_prompt"],
         }
 
+        # Clear cache before inference
+        torch.cuda.empty_cache()
+
         # Run inference
         print(f"Running inference with {params['layers']} layers at {params['resolution']} resolution...")
         with torch.inference_mode():
             output = pipeline(**pipeline_inputs)
             output_layers = output.images[0]  # List of PIL Images (RGBA)
+
+        # Clear cache after inference
+        torch.cuda.empty_cache()
 
         print(f"Inference complete! Generated {len(output_layers)} layers")
 

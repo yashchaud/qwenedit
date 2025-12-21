@@ -33,6 +33,10 @@ ENV PYTHONUNBUFFERED=1
 ENV CUDA_VISIBLE_DEVICES=0
 ENV PORT=8000
 
+# PyTorch CUDA memory management optimizations
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+ENV CUDA_LAUNCH_BLOCKING=0
+
 # Expose port for Pod deployment (ignored in Serverless)
 EXPOSE 8000
 
