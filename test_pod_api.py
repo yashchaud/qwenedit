@@ -20,7 +20,10 @@ def test_health(pod_url: str):
     print("Testing health endpoint...")
     response = requests.get(f"{pod_url}/health")
     print(f"Status: {response.status_code}")
-    print(f"Response: {response.json()}")
+    if response.status_code == 200:
+        print(f"Response: {response.json()}")
+    else:
+        print(f"Error: {response.text}")
     print()
 
 def test_inference(pod_url: str, image_path: str):

@@ -4,7 +4,7 @@ FastAPI Server for RunPod Pods (Persistent Deployment)
 This server exposes the Qwen-Image-Layered model as a REST API for RunPod Pods.
 """
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -17,6 +17,9 @@ import os
 import traceback
 import tempfile
 import uvicorn
+import uuid
+import time
+from pathlib import Path
 
 # Initialize FastAPI
 app = FastAPI(
@@ -27,6 +30,13 @@ app = FastAPI(
 
 # Global pipeline instance
 pipeline = None
+
+# Job storage (in production, use Redis or database)
+jobs = {}
+
+# Output directory for saved files
+OUTPUT_DIR = Path("/root/qwenedit/outputs")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class InferenceRequest(BaseModel):
@@ -121,6 +131,94 @@ async def health():
         model_loaded=pipeline is not None,
         gpu_available=gpu_available,
         gpu_name=gpu_name
+    )
+
+
+@app.post("/inference/job")
+async def create_inference_job(request: InferenceRequest, background_tasks: BackgroundTasks):
+    """
+    Create an inference job that runs in the background
+
+    Returns a job_id immediately. Use /job/{job_id} to check status and get results.
+    """
+    if pipeline is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
+
+    # Generate job ID
+    job_id = str(uuid.uuid4())
+
+    # Initialize job status
+    jobs[job_id] = {
+        "status": "queued",
+        "created_at": time.time(),
+        "completed_at": None,
+        "error": None,
+        "layers": [],
+        "metadata": {}
+    }
+
+    # Start background task
+    background_tasks.add_task(run_inference_job, job_id, request)
+
+    return JSONResponse(content={
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Job created successfully. Use GET /job/{job_id} to check status."
+    })
+
+
+@app.get("/job/{job_id}")
+async def get_job_status(job_id: str):
+    """
+    Get the status and results of an inference job
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = jobs[job_id]
+
+    # Build response
+    response = {
+        "job_id": job_id,
+        "status": job["status"],
+        "created_at": job["created_at"]
+    }
+
+    if job["status"] == "completed":
+        response["completed_at"] = job["completed_at"]
+        response["layers"] = job["layers"]
+        response["metadata"] = job["metadata"]
+    elif job["status"] == "failed":
+        response["error"] = job["error"]
+
+    return JSONResponse(content=response)
+
+
+@app.get("/download/{job_id}/{layer_index}")
+async def download_layer(job_id: str, layer_index: int):
+    """
+    Download a specific layer file by job_id and layer_index
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job = jobs[job_id]
+
+    if job["status"] != "completed":
+        raise HTTPException(status_code=400, detail=f"Job status is {job['status']}, not completed")
+
+    if layer_index >= len(job["layers"]):
+        raise HTTPException(status_code=404, detail=f"Layer {layer_index} not found")
+
+    file_path = job["layers"][layer_index]["file_path"]
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(
+        file_path,
+        media_type="image/png",
+        filename=f"layer_{layer_index}.png"
     )
 
 
@@ -287,6 +385,92 @@ def encode_image(image: Image.Image) -> str:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+
+def run_inference_job(job_id: str, request: InferenceRequest):
+    """
+    Background task to run inference and save results to disk
+    """
+    try:
+        jobs[job_id]["status"] = "processing"
+
+        # Decode input image
+        image = decode_image(request.image)
+
+        # Ensure RGBA
+        if image.mode != "RGBA":
+            image = image.convert("RGBA")
+
+        # Set up generator for reproducibility
+        generator = None
+        seed_used = None
+        if request.seed is not None:
+            generator = torch.Generator(device='cuda').manual_seed(request.seed)
+            seed_used = request.seed
+
+        # Prepare pipeline inputs
+        pipeline_inputs = {
+            "image": image,
+            "generator": generator,
+            "true_cfg_scale": request.true_cfg_scale,
+            "negative_prompt": request.negative_prompt,
+            "num_inference_steps": request.num_inference_steps,
+            "num_images_per_prompt": request.num_images_per_prompt,
+            "layers": request.layers,
+            "resolution": request.resolution,
+            "cfg_normalize": request.cfg_normalize,
+            "use_en_prompt": request.use_en_prompt,
+        }
+
+        # Clear cache before inference
+        torch.cuda.empty_cache()
+
+        # Run inference
+        print(f"[Job {job_id}] Running inference with {request.layers} layers at {request.resolution} resolution...")
+        with torch.inference_mode():
+            output = pipeline(**pipeline_inputs)
+            output_layers = output.images[0]  # List of PIL Images (RGBA)
+
+        # Clear cache after inference
+        torch.cuda.empty_cache()
+
+        print(f"[Job {job_id}] Inference complete! Generated {len(output_layers)} layers")
+
+        # Create job directory
+        job_dir = OUTPUT_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save layers to disk
+        layer_info = []
+        for i, layer in enumerate(output_layers):
+            file_path = job_dir / f"layer_{i}.png"
+            layer.save(file_path, format="PNG")
+            layer_info.append({
+                "layer_index": i,
+                "file_path": str(file_path),
+                "filename": f"layer_{i}.png"
+            })
+
+        # Update job status
+        jobs[job_id]["status"] = "completed"
+        jobs[job_id]["completed_at"] = time.time()
+        jobs[job_id]["layers"] = layer_info
+        jobs[job_id]["metadata"] = {
+            "num_layers": len(output_layers),
+            "resolution": request.resolution,
+            "seed_used": seed_used
+        }
+
+        print(f"[Job {job_id}] Job completed successfully. Files saved to {job_dir}")
+
+    except Exception as e:
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["error"] = {
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }
+        print(f"[Job {job_id}] Job failed: {str(e)}")
+        print(traceback.format_exc())
 
 
 if __name__ == "__main__":

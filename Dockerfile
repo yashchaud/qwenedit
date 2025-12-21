@@ -1,6 +1,6 @@
 # Dockerfile for Qwen-Image-Layered
 # Supports both RunPod Serverless and RunPod Pods
-FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 # Set working directory
 WORKDIR /app
