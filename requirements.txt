@@ -8,5 +8,10 @@ accelerate>=0.24.0
 python-pptx>=0.6.21
 requests>=2.31.0
 
+# FastAPI for Pod deployment
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
 # Note: diffusers is installed from git in Dockerfile
 # git+https://github.com/huggingface/diffusers.git

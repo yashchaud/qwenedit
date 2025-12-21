@@ -1,41 +1,81 @@
-# Qwen-Image-Layered RunPod Serverless
+# Qwen-Image-Layered RunPod
 
-RunPod serverless inference server for [Qwen-Image-Layered](https://huggingface.co/Qwen/Qwen-Image-Layered), a revolutionary AI model that decomposes images into multiple RGBA layers for advanced editing capabilities.
+RunPod inference server for [Qwen-Image-Layered](https://huggingface.co/Qwen/Qwen-Image-Layered), a revolutionary AI model that decomposes images into multiple RGBA layers for advanced editing capabilities.
+
+**Supports both RunPod Serverless and RunPod Pods deployments!**
+
+## Quick Links
+
+- 📖 **[Complete API Examples](EXAMPLES.md)** - Detailed request/response examples
+- ⚖️ **[Deployment Comparison](DEPLOYMENT_COMPARISON.md)** - Serverless vs Pods comparison
+- 🚀 **[Deployment Guide](#deployment-options)** - Serverless vs Pods setup
+- 🔧 **[Self-Hosted Runner Setup](RUNNER_SETUP.md)** - Build on RunPod CPU instance
+- 📚 **[API Documentation](#api-usage)** - Parameter reference
 
 ## Features
 
 - Full parameter exposure for Qwen-Image-Layered pipeline
 - Variable layer decomposition (configurable layer count)
 - Dual output formats: Individual RGBA layers + PowerPoint package
+- **Dual deployment modes**: Serverless (on-demand) and Pods (persistent REST API)
 - Model caching on RunPod network volume (first start ~2-3 min, subsequent <1s)
 - Comprehensive error handling with detailed tracebacks
 - GPU-optimized with bfloat16 precision
-- Automated Docker builds via GitHub Actions
+- Automated Docker builds via GitHub Actions to Docker Hub
 
 ## Quick Start
 
 ### Docker Image
 
-Images are automatically built and pushed to GitHub Container Registry:
+Images are automatically built and pushed to Docker Hub:
 
 ```bash
-docker pull ghcr.io/<your-username>/qwenedit:latest
+docker pull <your-dockerhub-username>/qwenedit:latest
 ```
 
-### RunPod Deployment
+### Deployment Options
+
+#### Option 1: RunPod Serverless (On-Demand)
+
+Best for sporadic usage, pay-per-second billing.
 
 1. Go to [RunPod Serverless](https://www.runpod.io/serverless-gpu)
 2. Create new endpoint
-3. Use custom container: `ghcr.io/<your-username>/qwenedit:latest`
+3. Use custom container: `<your-dockerhub-username>/qwenedit:latest`
 4. Configure GPU (recommended: RTX 4090 24GB or A100 40GB)
-5. Set container disk to 50GB+ (model is ~40GB)
+5. Set container disk to 60GB+ (model is ~58GB)
 6. Enable network volume for model caching (recommended for faster subsequent starts)
 7. Set timeout to 180 seconds (to accommodate first-time model download)
 8. Deploy and copy your endpoint URL
 
+#### Option 2: RunPod Pods (Persistent REST API)
+
+Best for consistent usage, always-on REST API with FastAPI interface.
+
+1. Go to [RunPod Pods](https://www.runpod.io/console/gpu-cloud)
+2. Deploy a new pod
+3. Select GPU (recommended: RTX 4090 24GB or A100 40GB)
+4. Use custom container: `<your-dockerhub-username>/qwenedit:latest`
+5. Set container disk to 60GB+ (model is ~58GB)
+6. **Environment Variables**: Add `DEPLOYMENT_MODE=pod`
+7. **Expose HTTP Ports**: Add port `8000` (mapped to public port)
+8. Enable network volume for model persistence
+9. Deploy and access via: `https://<pod-id>-8000.proxy.runpod.net`
+
+**Pod API Endpoints:**
+- `GET /` - API information
+- `GET /health` - Health check and model status
+- `GET /docs` - Interactive Swagger UI documentation
+- `POST /inference` - Main inference endpoint (JSON)
+- `POST /inference/upload` - Inference with file upload
+
 ## API Usage
 
-### Input Schema
+**📖 For detailed examples with complete request/response formats, see [EXAMPLES.md](EXAMPLES.md)**
+
+### Serverless API (RunPod Serverless)
+
+#### Input Schema
 
 ```json
 {
@@ -130,7 +170,7 @@ for layer_data in result['layers']:
     img.save(f"layer_{idx}.png")
 ```
 
-### Example Usage (cURL)
+#### Example Usage (cURL)
 
 ```bash
 curl -X POST https://api.runpod.ai/v2/<endpoint_id>/run \
@@ -144,6 +184,95 @@ curl -X POST https://api.runpod.ai/v2/<endpoint_id>/run \
       "seed": 777
     }
   }'
+```
+
+### Pod REST API (RunPod Pods)
+
+When deployed as a Pod with `DEPLOYMENT_MODE=pod`, the server exposes a FastAPI REST interface.
+
+#### Health Check
+
+```bash
+curl https://<pod-id>-8000.proxy.runpod.net/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "gpu_available": true,
+  "gpu_name": "NVIDIA GeForce RTX 4090"
+}
+```
+
+#### Inference with JSON
+
+```bash
+curl -X POST https://<pod-id>-8000.proxy.runpod.net/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "image": "https://example.com/image.png",
+    "layers": 4,
+    "resolution": 640,
+    "seed": 777,
+    "output_format": "individual"
+  }'
+```
+
+#### Inference with File Upload
+
+```bash
+curl -X POST https://<pod-id>-8000.proxy.runpod.net/inference/upload \
+  -F "file=@input.png" \
+  -F "layers=4" \
+  -F "resolution=640" \
+  -F "seed=777"
+```
+
+#### Interactive Documentation
+
+Access Swagger UI at: `https://<pod-id>-8000.proxy.runpod.net/docs`
+
+#### Python Client (Pod)
+
+```python
+import requests
+import base64
+from PIL import Image
+from io import BytesIO
+
+# Pod endpoint
+POD_URL = "https://<pod-id>-8000.proxy.runpod.net"
+
+# Check health
+health = requests.get(f"{POD_URL}/health").json()
+print(f"Status: {health['status']}, GPU: {health['gpu_name']}")
+
+# Load and encode image
+image = Image.open("input.png").convert("RGBA")
+buffer = BytesIO()
+image.save(buffer, format="PNG")
+image_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+# Run inference
+response = requests.post(
+    f"{POD_URL}/inference",
+    json={
+        "image": image_b64,
+        "layers": 4,
+        "resolution": 640,
+        "seed": 777
+    }
+)
+result = response.json()
+
+# Save layers
+for layer_data in result['layers']:
+    idx = layer_data['layer_index']
+    img_bytes = base64.b64decode(layer_data['image'])
+    img = Image.open(BytesIO(img_bytes))
+    img.save(f"layer_{idx}.png")
 ```
 
 ## Local Testing
@@ -253,18 +382,37 @@ To enable:
 qwenedit/
 ├── .github/
 │   └── workflows/
-│       └── docker-build.yml      # CI/CD pipeline
+│       └── docker-build.yml           # CI/CD pipeline (Docker Hub)
 ├── utils/
 │   ├── __init__.py
-│   └── pptx_packager.py          # PowerPoint layer packaging
-├── handler.py                     # RunPod serverless handler
-├── Dockerfile                     # Container definition
-├── requirements.txt               # Python dependencies
-├── test_handler.py                # Local testing script
-├── .env.example                   # Configuration template
-├── .gitignore                     # Git ignore rules
-└── README.md                      # This file
+│   └── pptx_packager.py               # PowerPoint layer packaging
+├── handler.py                          # RunPod serverless handler
+├── api_server.py                       # FastAPI server for Pods
+├── entrypoint.sh                       # Deployment mode selector
+├── Dockerfile                          # Multi-mode container definition
+├── requirements.txt                    # Python dependencies
+├── test_handler.py                     # Local testing script (serverless)
+├── test_pod_api.py                     # Local testing script (pods)
+├── .env.example                        # Configuration template
+├── .gitignore                          # Git ignore rules
+├── README.md                           # Main documentation
+├── EXAMPLES.md                         # Complete API examples
+├── DEPLOYMENT_COMPARISON.md            # Serverless vs Pods comparison
+└── RUNNER_SETUP.md                     # Self-hosted runner setup guide
 ```
+
+### Deployment Modes
+
+The same Docker image supports both deployment modes:
+
+| Mode | Entry Point | Use Case | Billing |
+|------|-------------|----------|---------|
+| **Serverless** | `handler.py` (RunPod SDK) | Sporadic inference | Pay per second of usage |
+| **Pod** | `api_server.py` (FastAPI) | Persistent API, high traffic | Pay per hour |
+
+Controlled by `DEPLOYMENT_MODE` environment variable:
+- Default (or `DEPLOYMENT_MODE=serverless`): RunPod Serverless handler
+- `DEPLOYMENT_MODE=pod`: FastAPI REST server on port 8000
 
 ## Resources
 

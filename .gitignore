@@ -42,6 +42,8 @@ htmlcov/
 
 # Output files
 output/
+output_pod/
+output_pod_upload/
 output_*.png
 *.pptx
 
